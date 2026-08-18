@@ -174,3 +174,51 @@ class IngestBatcher {
         }
     }
 }
+
+const batcher = new IngestBatcher();
+
+export async function ingestLogsHandler(req: Request, res: Response) {
+    const rawLogs = Array.isArray(req.body) ? req.body : req.body?.logs;
+
+    if (!Array.isArray(rawLogs)) {
+        return res.status(400).json({
+            error: 'Invalid request body. Expected array or { logs: [...] }',
+        });
+    }
+
+    const rejected: Array<{ index: number; reason: string }> = [];
+    const validLogsToInsert: LogItem[] = [];
+
+    for (let index = 0; index < rawLogs.length; index++) {
+        const item = rawLogs[index];
+        const result = LogItemSchema.safeParse(item);
+        if (result.success) {
+            validLogsToInsert.push(result.data);
+        } else {
+            const errorMessage = result.error.issues
+                .map((e) => `${e.path.join('.')}: ${e.message}`)
+                .join(', ');
+            rejected.push({ index, reason: errorMessage });
+        }
+    }
+
+    // if (validLogsToInsert.length === 0) {
+    //     return res.status(rawLogs.length > 0 ? 400 : 200).json({ accepted: 0, rejected });
+    // }
+    if (validLogsToInsert.length === 0) {
+        return res.status(400).json({
+            accepted: 0,
+            rejected
+        });
+    }
+
+    try {
+        await batcher.save(validLogsToInsert);
+        return res.status(200).json({
+            accepted: validLogsToInsert.length,
+            rejected,
+        });
+    } catch (error) {
+        return res.status(503).json({ error: 'Failed to persist logs, try again shortly' });
+    }
+}
