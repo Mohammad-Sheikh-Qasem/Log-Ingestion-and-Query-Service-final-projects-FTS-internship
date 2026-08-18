@@ -9,5 +9,7 @@ const router = Router();
 
 router.post('/logs', ingestLogsHandler);
 router.get('/logs', queryLogsHandler);
+router.get('/logs/aggregate', aggregateLogsHandler);
+
 
 export default router;
