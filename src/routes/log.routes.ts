@@ -8,5 +8,6 @@ import { cleanupOldLogs } from '../services/index.js';
 const router = Router();
 
 router.post('/logs', ingestLogsHandler);
+router.get('/logs', queryLogsHandler);
 
 export default router;
