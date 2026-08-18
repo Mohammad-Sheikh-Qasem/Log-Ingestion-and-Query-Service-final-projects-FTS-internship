@@ -34,3 +34,31 @@ function buildLogsInsertParams(entries: LogItem[]) {
 
     return { timestamps, levels, services, messages, attributes };
 }
+
+function buildRollupUpsertParams(entries: LogItem[]) {
+    const map = new Map<string, { bucket: string; service: string; level: string; count: number }>();
+    for (const log of entries) {
+        const bucket = truncateToMinuteISO(log.timestamp);
+        const key = `${bucket}|${log.service}|${log.level}`;
+        const existing = map.get(key);
+        if (existing) {
+            existing.count++;
+        } else {
+            map.set(key, { bucket, service: log.service, level: log.level, count: 1 });
+        }
+    }
+
+    const rows = Array.from(map.values()).sort(
+        (a, b) =>
+            a.bucket.localeCompare(b.bucket) ||
+            a.service.localeCompare(b.service) ||
+            a.level.localeCompare(b.level)
+    );
+
+    return {
+        buckets: rows.map((r) => r.bucket),
+        services: rows.map((r) => r.service),
+        levels: rows.map((r) => r.level),
+        counts: rows.map((r) => r.count),
+    };
+}
