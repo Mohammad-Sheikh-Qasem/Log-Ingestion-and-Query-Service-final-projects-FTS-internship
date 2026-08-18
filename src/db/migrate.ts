@@ -64,11 +64,13 @@ export async function runMigration(){
         `);
 
         await client.query(`COMMIT`);
-
-
-
+        console.log('Migrations completed successfully');
 
     }catch(error){
-
+        await client.query('ROLLBACK');
+        console.error('Migration failed', error);
+        throw error;
+    }finally {
+        client.release();
     }
 }
