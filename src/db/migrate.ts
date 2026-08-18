@@ -63,6 +63,9 @@ export async function runMigration(){
         DROP INDEX IF EXISTS idx_logs_attributes_search_gin;
         `);
 
+        await client.query(`COMMIT`);
+
+
 
 
     }catch(error){
