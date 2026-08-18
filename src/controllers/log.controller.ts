@@ -16,3 +16,21 @@ function truncateToMinuteISO(isoTimestamp: string): string {
     d.setUTCSeconds(0, 0);
     return d.toISOString();
 }
+
+function buildLogsInsertParams(entries: LogItem[]) {
+    const timestamps: string[] = [];
+    const levels: string[] = [];
+    const services: string[] = [];
+    const messages: string[] = [];
+    const attributes: string[] = [];
+
+    for (const log of entries) {
+        timestamps.push(log.timestamp);
+        levels.push(log.level);
+        services.push(log.service);
+        messages.push(log.message);
+        attributes.push(JSON.stringify(log.attributes || {}));
+    }
+
+    return { timestamps, levels, services, messages, attributes };
+}
