@@ -10,3 +10,9 @@ interface PendingBatch {
     resolve: () => void;
     reject: (error: unknown) => void;
 }
+
+function truncateToMinuteISO(isoTimestamp: string): string {
+    const d = new Date(isoTimestamp);
+    d.setUTCSeconds(0, 0);
+    return d.toISOString();
+}
