@@ -1,9 +1,9 @@
 import express from 'express';
 import dotenv from 'dotenv';
-//import { pool } from './db/index.ts';
-import {runMigration} from "./db/migrate";
-import {startRetentionScheduler} from "./services";
-import {pool} from "./db";
+import { pool } from './db/index.js';
+import { runMigration } from './db/migrate.js';
+import logRoutes from './routes/log.routes.js';
+import { startRetentionScheduler } from './services/index.js';
 
 
 dotenv.config();
@@ -12,6 +12,13 @@ const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(express.json());
+
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err instanceof SyntaxError && 'body' in err) {
+        return res.status(400).json({ error: 'Malformed JSON in request body' });
+    }
+    next(err);
+});
 
 app.get('/health', async (req, res ) => {
     try {
@@ -22,6 +29,7 @@ app.get('/health', async (req, res ) => {
     }
 });
 
+app.use(logRoutes);
 
 // app.listen(PORT, () => {
 //     console.log(`Server is running on port ${PORT}`);
