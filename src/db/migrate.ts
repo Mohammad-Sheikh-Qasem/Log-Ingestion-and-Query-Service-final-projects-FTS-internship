@@ -26,6 +26,24 @@ export async function runMigration(){
         `);
 
 
+        await client.query(`
+        CREATE OR REPLACE FUNCTION logs_attributes_kv(a jsonb) RETURNS text[]
+          LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
+          $$
+            SELECT array_agg(length(k)::text || ':' || k || '=' || v ORDER BY k)
+            FROM LATERAL jsonb_each_text(a) AS kv(k, v)
+          $$;
+        `);
+
+
+        await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_logs_attributes_kv
+        ON logs USING GIN (logs_attributes_kv(attributes));
+        `);
+
+        await client.query(``);
+
+
 
     }catch(error){
 
