@@ -13,3 +13,7 @@ function isValidIsoTimestamp(val: string): boolean {
     const d = new Date(val);
     return !isNaN(d.getTime());
 }
+
+function encodeAttributeKv(key: string, value: string): string {
+    return `${key.length}:${key}=${value}`;
+}
