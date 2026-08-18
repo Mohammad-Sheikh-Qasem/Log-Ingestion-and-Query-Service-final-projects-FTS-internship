@@ -62,3 +62,48 @@ function buildRollupUpsertParams(entries: LogItem[]) {
         counts: rows.map((r) => r.count),
     };
 }
+
+async function persistEntries(entries: LogItem[]): Promise<void> {
+    if (entries.length === 0) return;
+
+    const client = await pool.connect();
+    try {
+        for (let attempt = 1; ; attempt++) {
+            try {
+                await client.query('BEGIN');
+
+                const { timestamps, levels, services, messages, attributes } = buildLogsInsertParams(entries);
+                await client.query(
+                    `INSERT INTO logs (timestamp, level, service, message, attributes)
+                     SELECT t::timestamptz, l, s, m, a::jsonb
+                     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::text[], $5::text[])
+                     AS x(t, l, s, m, a);`,
+                    [timestamps, levels, services, messages, attributes]
+                );
+
+                const { buckets, services: rServices, levels: rLevels, counts } = buildRollupUpsertParams(entries);
+                await client.query(
+                    `INSERT INTO logs_rollup_1m (bucket_start, service, level, count)
+                     SELECT b::timestamptz, s, l, c::bigint
+                     FROM UNNEST($1::text[], $2::text[], $3::text[], $4::bigint[]) AS x(b, s, l, c)
+                     ON CONFLICT (bucket_start, service, level)
+                     DO UPDATE SET count = logs_rollup_1m.count + EXCLUDED.count;`,
+                    [buckets, rServices, rLevels, counts]
+                );
+
+                await client.query('COMMIT');
+                return;
+            } catch (error) {
+                await client.query('ROLLBACK');
+                const isDeadlock =
+                    attempt < 3 &&
+                    typeof error === 'object' &&
+                    error !== null &&
+                    (error as { code?: string }).code === '40P01';
+                if (!isDeadlock) throw error;
+            }
+        }
+    } finally {
+        client.release();
+    }
+}
