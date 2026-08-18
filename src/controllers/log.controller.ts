@@ -107,3 +107,70 @@ async function persistEntries(entries: LogItem[]): Promise<void> {
         client.release();
     }
 }
+
+class IngestBatcher {
+    private queue: PendingBatch[] = [];
+    private activeFlushes = 0;
+    private waiters: Array<() => void> = [];
+
+    save(entries: LogItem[]): Promise<void> {
+        if (entries.length === 0) return Promise.resolve();
+
+        return new Promise<void>((resolve, reject) => {
+            this.queue.push({ entries, resolve, reject });
+            this.wakeAll();
+            this.spawnFlush();
+        });
+    }
+
+    private wakeAll() {
+        const w = this.waiters;
+        this.waiters = [];
+        w.forEach((fn) => fn());
+    }
+
+    private spawnFlush() {
+        if (this.activeFlushes >= MAX_CONCURRENT_FLUSHES || this.queue.length === 0) return;
+
+        this.activeFlushes++;
+        this.runFlushLoop().finally(() => {
+            this.activeFlushes--;
+            this.spawnFlush();
+        });
+    }
+
+    private async runFlushLoop() {
+        while (this.queue.length > 0) {
+            const batches = this.takeBatches();
+            if (batches.length === 0) break;
+            await this.persist(batches);
+        }
+    }
+
+    private takeBatches(): PendingBatch[] {
+        const batches: PendingBatch[] = [];
+        let count = 0;
+        while (this.queue.length > 0) {
+            const next = this.queue[0];
+            if (count > 0 && count + next.entries.length > TARGET_FLUSH_SIZE) break;
+            this.queue.shift();
+            batches.push(next);
+            count += next.entries.length;
+        }
+        if (batches.length === 0 && this.queue.length > 0) {
+            batches.push(this.queue.shift()!);
+        }
+        return batches;
+    }
+
+    private async persist(batches: PendingBatch[]) {
+        const entries = batches.flatMap((b) => b.entries);
+        try {
+            await persistEntries(entries);
+            batches.forEach((b) => b.resolve());
+        } catch (error) {
+            console.error('Error persisting log batch:', error);
+            batches.forEach((b) => b.reject(error));
+        }
+    }
+}
