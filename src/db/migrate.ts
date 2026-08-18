@@ -59,6 +59,10 @@ export async function runMigration(){
         ALTER TABLE logs DRPO COLUMN IF EXISTS attributes_search;
         `);
 
+        await client.query(`
+        DROP INDEX IF EXISTS idx_logs_attributes_search_gin;
+        `);
+
 
 
     }catch(error){
