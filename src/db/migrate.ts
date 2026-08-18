@@ -51,6 +51,14 @@ export async function runMigration(){
         );
         `);
 
+        await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_rollup_1m_bucket ON logs_rollup_1m (bucket_start);
+        `);
+
+        await client.query(` 
+        ALTER TABLE logs DRPO COLUMN IF EXISTS attributes_search;
+        `);
+
 
 
     }catch(error){
