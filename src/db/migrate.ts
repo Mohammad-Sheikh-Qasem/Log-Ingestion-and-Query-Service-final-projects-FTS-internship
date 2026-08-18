@@ -41,7 +41,15 @@ export async function runMigration(){
         ON logs USING GIN (logs_attributes_kv(attributes));
         `);
 
-        await client.query(``);
+        await client.query(`
+        CREATE TABLE IF NOT EXISTS logs_rollup_1m (
+            buket_start TIMESTAMPZ NOT NULL,
+            service VARCHAR(255) NOT NULL,
+            level VARCHAR(10) NOT NULL,
+            count BIGINT NOT NULL DEFAULT 0,
+            PRIMARY KEY (bucket_start, service, level)
+        );
+        `);
 
 
 
