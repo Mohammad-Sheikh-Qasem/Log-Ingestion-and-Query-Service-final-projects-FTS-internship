@@ -1,33 +1,31 @@
-import { pool} from './index.js';
+import { pool } from './index.js';
 
-
-export async function runMigration(){
+export async function runMigrations() {
     const client = await pool.connect();
-
     try {
         await client.query('BEGIN');
 
         await client.query(`
-        CREATE TABLE IF NOT EXISTS logs(
+          CREATE TABLE IF NOT EXISTS logs (
             id BIGSERIAL PRIMARY KEY,
-            timestamp TIMESTAMPZ NOT NULL,
+            timestamp TIMESTAMPTZ NOT NULL,
             level VARCHAR(10) NOT NULL,
-            service TEXT NOT NULL,
+            service VARCHAR(255) NOT NULL,
+            message TEXT NOT NULL,
             attributes JSONB NOT NULL DEFAULT '{}'::jsonb
-        );
+          );
         `);
 
         await client.query(`
-        CREATE TABLE IF NOT EXISTS idx_logs_timestamp_id ON logs (timestamp DESC, id DESC);
+          CREATE INDEX IF NOT EXISTS idx_logs_timestamp_id ON logs (timestamp DESC, id DESC);
         `);
 
         await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_logs_timestamp_id ON logs (service, level, timestamp DESC);
+          CREATE INDEX IF NOT EXISTS idx_logs_service_level_ts ON logs (service, level, timestamp DESC);
         `);
 
-
         await client.query(`
-        CREATE OR REPLACE FUNCTION logs_attributes_kv(a jsonb) RETURNS text[]
+          CREATE OR REPLACE FUNCTION logs_attributes_kv(a jsonb) RETURNS text[]
           LANGUAGE sql IMMUTABLE PARALLEL SAFE AS
           $$
             SELECT array_agg(length(k)::text || ':' || k || '=' || v ORDER BY k)
@@ -35,42 +33,39 @@ export async function runMigration(){
           $$;
         `);
 
-
         await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_logs_attributes_kv
-        ON logs USING GIN (logs_attributes_kv(attributes));
+          CREATE INDEX IF NOT EXISTS idx_logs_attributes_kv
+          ON logs USING GIN (logs_attributes_kv(attributes));
         `);
 
         await client.query(`
-        CREATE TABLE IF NOT EXISTS logs_rollup_1m (
-            buket_start TIMESTAMPZ NOT NULL,
+          CREATE TABLE IF NOT EXISTS logs_rollup_1m (
+            bucket_start TIMESTAMPTZ NOT NULL,
             service VARCHAR(255) NOT NULL,
             level VARCHAR(10) NOT NULL,
             count BIGINT NOT NULL DEFAULT 0,
             PRIMARY KEY (bucket_start, service, level)
-        );
+          );
         `);
 
         await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_rollup_1m_bucket ON logs_rollup_1m (bucket_start);
-        `);
-
-        await client.query(` 
-        ALTER TABLE logs DRPO COLUMN IF EXISTS attributes_search;
+          CREATE INDEX IF NOT EXISTS idx_rollup_1m_bucket ON logs_rollup_1m (bucket_start);
         `);
 
         await client.query(`
-        DROP INDEX IF EXISTS idx_logs_attributes_search_gin;
+          ALTER TABLE logs DROP COLUMN IF EXISTS attributes_search;
+        `);
+        await client.query(`
+          DROP INDEX IF EXISTS idx_logs_attributes_search_gin;
         `);
 
-        await client.query(`COMMIT`);
+        await client.query('COMMIT');
         console.log('Migrations completed successfully');
-
-    }catch(error){
+    } catch (error) {
         await client.query('ROLLBACK');
-        console.error('Migration failed', error);
+        console.error('Migration failed:', error);
         throw error;
-    }finally {
+    } finally {
         client.release();
     }
 }
