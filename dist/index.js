@@ -17,7 +17,7 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const index_js_1 = require("./db/index.js");
 const migrate_js_1 = require("./db/migrate.js");
 const log_routes_js_1 = __importDefault(require("./routes/log.routes.js"));
-const index_js_2 = require("./services/index.js");
+const retention_service_js_1 = require("./services/retention.service.js");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 8080;
@@ -28,30 +28,28 @@ app.use((err, req, res, next) => {
     }
     next(err);
 });
+// Routes
+app.use(log_routes_js_1.default);
 app.get('/health', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield index_js_1.pool.query(' SELECT 1');
+        yield index_js_1.pool.query('SELECT 1');
         res.status(200).json({ status: 'healthy', database: 'connected' });
     }
     catch (error) {
         res.status(500).json({ status: 'unhealthy', database: 'disconnected' });
     }
 }));
-app.use(log_routes_js_1.default);
-// app.listen(PORT, () => {
-//     console.log(`Server is running on port ${PORT}`);
-// });
 function startServer() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield (0, migrate_js_1.runMigration)();
-            (0, index_js_2.startRetentionScheduler)();
+            yield (0, migrate_js_1.runMigrations)();
+            (0, retention_service_js_1.startRetentionScheduler)();
             app.listen(PORT, () => {
                 console.log(`Server is running on port ${PORT}`);
             });
         }
         catch (error) {
-            console.error('Failed to start server', error);
+            console.error('Failed to start server:', error);
             process.exit(1);
         }
     });
