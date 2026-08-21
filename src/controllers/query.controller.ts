@@ -54,7 +54,7 @@ export async function queryLogsHandler(req: Request, res: Response) {
             }
         }
 
-        // ---- جمع شروط attr. (مرتّبة لتناسق الخطة) ----
+
         const attributeEntries: Array<[string, string]> = [];
         for (const key of Object.keys(req.query)) {
             if (key.startsWith('attr.')) {
