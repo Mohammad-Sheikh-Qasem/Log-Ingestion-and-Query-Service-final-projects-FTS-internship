@@ -899,8 +899,8 @@ The final implementation achieved strong correctness and reliability while susta
 
 # Author
 
-**Mohamad Sheikh Qasem**
+   **Mohamad Sheikh Qasem**
 
-Computer Science Student
+   Computer Science Student
 
-Backend Development | Node.js | TypeScript | PostgreSQL
+   Backend Development | Node.js | TypeScript | PostgreSQL
