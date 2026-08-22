@@ -1,441 +1,372 @@
 # Log Ingestion and Query Service
 
-A high-performance backend service for **ingesting, storing, querying, and aggregating application logs at scale**.
+<p align="center">
+  <strong>A high-throughput backend service for reliable log ingestion, querying, and aggregation.</strong>
+</p>
 
-The system is designed to handle high-throughput log ingestion while maintaining reliable query performance, data consistency, and fault tolerance. It uses **Node.js, TypeScript, PostgreSQL, Docker, and Fastify** to provide a production-oriented log management backend.
+<p align="center">
+  Built with Node.js, TypeScript, Fastify, PostgreSQL, and Docker.
+</p>
 
----
-
-## 📊 Performance Benchmark
-
-The final implementation was evaluated using the project benchmark suite.
-
-| Category                  |              Result |
-| ------------------------- | ------------------: |
-| **Correctness**           |       **15.0 / 15** |
-| **Performance**           |       **41.3 / 50** |
-| **Throughput**            | **14,957 logs/sec** |
-| **Error Rate**            |            **0.0%** |
-| **P95 Latency**           |          **430 ms** |
-| **Queries**               |       **13.2 / 15** |
-| **Aggregate P95**         |          **100 ms** |
-| **Query Consistency**     |           **4 / 4** |
-| **Reliability**           |       **20.0 / 20** |
-| **Reliability Scenarios** |           **4 / 4** |
-
-### Overall Result
-
-The service successfully achieved:
-
-* **14,957 logs/second** ingestion throughput
-* **0% ingestion errors**
-* **430 ms P95 latency**
-* **100 ms aggregate query P95**
-* **15/15 correctness checks**
-* **4/4 reliability scenarios**
-* **4/4 query consistency checks**
-
-These results demonstrate that the service can process a high volume of logs while maintaining correctness and reliable query behavior.
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-22%2B-339933?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js">
+  <img src="https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Fastify-5.x-000000?style=for-the-badge&logo=fastify&logoColor=white" alt="Fastify">
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker">
+</p>
 
 ---
 
-## 🎯 Project Overview
+## Overview
 
-Modern applications and distributed systems continuously generate large amounts of logs.
+**Log Ingestion and Query Service** is a backend system designed to ingest large volumes of application logs while maintaining reliable persistence, efficient querying, aggregation performance, and predictable behavior under high load.
 
-A naive implementation might insert every incoming log into PostgreSQL individually:
+The project focuses on practical backend engineering challenges such as:
 
-```text
-HTTP Request
-     │
-     ▼
-Application
-     │
-     ▼
-INSERT log
-     │
-     ▼
-PostgreSQL
-```
-
-This approach creates a large number of database operations and network round trips.
-
-For high-volume workloads, such as **15,000+ logs per second**, this can quickly become a bottleneck.
-
-This project addresses that problem using an optimized ingestion architecture based on:
-
-* In-memory batching
+* High-throughput log ingestion
+* In-memory batch processing
 * Bulk database inserts
-* PostgreSQL indexing
-* Efficient query filtering
+* PostgreSQL connection pooling
+* Efficient database indexing
 * Cursor-based pagination
+* Time-based aggregation
 * Pre-aggregated rollups
-* Connection pooling
+* Query consistency
+* Reliability under high load
 * Dockerized deployment
+* Performance benchmarking
+
+The final benchmark achieved a throughput of **14,957 logs/second** with **0.0% errors**.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-```text
-                    ┌─────────────────────┐
-                    │    Log Producers    │
-                    │  / Benchmark Tool   │
-                    └──────────┬──────────┘
-                               │
-                               │ HTTP
-                               ▼
-                    ┌─────────────────────┐
-                    │     Fastify API     │
-                    │                     │
-                    │  POST /logs         │
-                    │  GET  /logs         │
-                    │  GET  /logs/aggregate│
-                    └──────────┬──────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   Log Service       │
-                    │                     │
-                    │ Validation          │
-                    │ Batching             │
-                    │ Query Logic          │
-                    │ Aggregation          │
-                    └──────────┬──────────┘
-                               │
-                ┌──────────────┴──────────────┐
-                │                             │
-                ▼                             ▼
-      ┌──────────────────┐          ┌──────────────────┐
-      │ PostgreSQL       │          │ Rollup/Aggregate │
-      │                  │          │ Data             │
-      │ logs             │          │                  │
-      │ indexes          │          │ bucket/service/  │
-      │                  │          │ level/count      │
-      └──────────────────┘          └──────────────────┘
+The system is organized around a REST API, an ingestion pipeline, query and aggregation services, and PostgreSQL.
+
+```mermaid
+flowchart LR
+
+    Client["Client"]
+    Benchmark["Benchmark / Load Generator"]
+
+    API["Fastify API"]
+
+    Routes["API Routes"]
+    Validation["Request Validation"]
+
+    Ingestion["Log Ingestion"]
+    Batch["In-Memory Batching"]
+
+    Query["Query Service"]
+    Aggregate["Aggregation Service"]
+
+    DB[("PostgreSQL")]
+
+    Logs[("logs")]
+    Rollups[("logs_rollup")]
+
+    Client --> API
+    Benchmark --> API
+
+    API --> Routes
+    Routes --> Validation
+
+    Validation --> Ingestion
+    Ingestion --> Batch
+    Batch --> DB
+
+    API --> Query
+    API --> Aggregate
+
+    Query --> DB
+    Aggregate --> DB
+
+    DB --> Logs
+    DB --> Rollups
+```
+
+The architecture separates request handling, business logic, persistence, querying, and aggregation so that each part can be optimized independently.
+
+---
+
+## Log Ingestion Flow
+
+The ingestion pipeline is designed to process large batches of logs efficiently while minimizing database round trips.
+
+```mermaid
+flowchart TD
+
+    A["POST /logs"]
+    B["Request Validation"]
+    C{"Request Valid?"}
+    D["Reject Request"]
+
+    E["Add Logs to In-Memory Batch"]
+    F{"Batch Ready?"}
+
+    G["Continue Collecting"]
+    H["Bulk Database Insert"]
+
+    DB[("PostgreSQL")]
+    R["Return Response"]
+
+    A --> B
+    B --> C
+
+    C -->|No| D
+    C -->|Yes| E
+
+    E --> F
+    F -->|No| G
+    G --> E
+
+    F -->|Yes| H
+    H --> DB
+    H --> R
 ```
 
 ---
 
-# 🚀 Key Technical Decisions
+## Batching
 
-## 1. In-Memory Batching
+A major performance decision in the project is the use of **in-memory batching**.
 
-One of the most important performance decisions is **batching incoming logs before inserting them into PostgreSQL**.
-
-Instead of:
+A naive implementation would perform one database operation for every log:
 
 ```text
-Log 1 → INSERT
-Log 2 → INSERT
-Log 3 → INSERT
-Log 4 → INSERT
+Log 1 ──► INSERT ──► PostgreSQL
+Log 2 ──► INSERT ──► PostgreSQL
+Log 3 ──► INSERT ──► PostgreSQL
+Log 4 ──► INSERT ──► PostgreSQL
+Log 5 ──► INSERT ──► PostgreSQL
 ...
 ```
 
-the service groups logs together:
+At approximately 15,000 logs per second, this would generate a very large number of database operations and network round trips.
+
+Instead, logs are grouped into batches:
 
 ```text
 Log 1 ─┐
 Log 2  │
-Log 3  ├──► Batch ──► Bulk INSERT ──► PostgreSQL
-Log 4  │
-Log 5 ─┘
+Log 3  │
+Log 4  ├────► In-Memory Batch
+Log 5  │
+Log 6  │
+Log N ─┘
+             │
+             ▼
+        Bulk INSERT
+             │
+             ▼
+        PostgreSQL
 ```
 
-This significantly reduces:
+This reduces:
 
 * Database round trips
-* SQL statement overhead
-* Connection usage
+* SQL execution overhead
 * Transaction overhead
+* Connection pressure
 
-It is particularly important for workloads approaching **15,000 logs/sec**.
+and allows the service to process a much higher ingestion rate.
 
 ---
 
-## 2. PostgreSQL Connection Pooling
+## Database Design
 
-The application uses a PostgreSQL connection pool instead of opening a new database connection for every request.
+The application uses PostgreSQL as its primary persistence layer.
 
-```text
-                Application
-                     │
-                     ▼
-              Connection Pool
-          ┌──────┬──────┬──────┐
-          │ Conn │ Conn │ Conn │
-          └──┬───┴──┬───┴──┬───┘
-             │      │      │
-             └──────┴──────┘
-                    │
-                    ▼
-                PostgreSQL
+### Entity Relationship Diagram
+
+```mermaid
+erDiagram
+
+    LOGS {
+        BIGSERIAL id PK
+        TIMESTAMPTZ timestamp
+        VARCHAR service
+        VARCHAR level
+        TEXT message
+        JSONB attributes
+    }
+
+    LOGS_ROLLUP {
+        TIMESTAMPTZ bucket_start PK
+        VARCHAR service PK
+        VARCHAR level PK
+        BIGINT count
+    }
+
+    LOGS ||--o{ LOGS_ROLLUP : "aggregated into"
 ```
 
-Connection pooling improves scalability by allowing database connections to be reused efficiently.
+> `logs_rollup` represents derived aggregation data. The relationship above is logical and does not imply a direct foreign-key relationship.
 
 ---
 
-## 3. Bulk Inserts
+## `logs`
 
-Logs are inserted in batches instead of executing an individual SQL operation for every log.
+The `logs` table stores the raw application logs.
 
-Conceptually:
-
-```sql
-INSERT INTO logs (...)
-VALUES
-  (...),
-  (...),
-  (...),
-  (...);
-```
-
-This reduces the number of database operations required to process a large workload.
+| Column       | Type          | Description                    |
+| ------------ | ------------- | ------------------------------ |
+| `id`         | `BIGSERIAL`   | Unique log identifier          |
+| `timestamp`  | `TIMESTAMPTZ` | Log timestamp                  |
+| `service`    | `VARCHAR`     | Service that generated the log |
+| `level`      | `VARCHAR`     | Log severity                   |
+| `message`    | `TEXT`        | Log message                    |
+| `attributes` | `JSONB`       | Additional structured metadata |
 
 ---
 
-## 4. Efficient Querying
+## Rollup Data
 
-The service supports querying logs using filters such as:
-
-* Service
-* Log level
-* Time range
-* Other supported fields
-
-Database indexes are used to avoid unnecessary full-table scans.
-
-The goal is to keep query performance predictable even as the number of stored logs grows.
-
----
-
-## 5. Cursor-Based Pagination
-
-The API uses cursor-based pagination rather than relying exclusively on large `OFFSET` values.
-
-Conceptually:
-
-```text
-Page 1
-  │
-  ▼
-last record cursor
-  │
-  ▼
-Page 2
-  │
-  ▼
-next cursor
-  │
-  ▼
-Page 3
-```
-
-This provides more stable performance when navigating through large datasets.
-
-It also helps maintain deterministic ordering across pages.
-
----
-
-## 6. Aggregation and Rollups
-
-The system supports aggregate queries that summarize logs by dimensions such as:
-
-* Time bucket
-* Service
-* Log level
-
-Instead of repeatedly scanning the entire raw logs table for every aggregation request, aggregate information can be maintained in rollup data.
-
-Example:
+The system maintains aggregated information to make aggregation queries more efficient.
 
 ```text
 Raw Logs
-
-10:01 service-A ERROR
-10:01 service-A ERROR
-10:01 service-A INFO
-10:01 service-B ERROR
-        │
-        ▼
-     Rollup
-        │
-        ▼
-┌────────────┬─────────┬───────┬───────┐
-│ Bucket     │ Service │ Level │ Count │
-├────────────┼─────────┼───────┼───────┤
-│ 10:01      │ A       │ ERROR │ 2     │
-│ 10:01      │ A       │ INFO  │ 1     │
-│ 10:01      │ B       │ ERROR │ 1     │
-└────────────┴─────────┴───────┴───────┘
+   │
+   │ aggregation
+   ▼
+┌─────────────────────────────┐
+│       Rollup Data           │
+├─────────────────────────────┤
+│ bucket_start                │
+│ service                     │
+│ level                       │
+│ count                       │
+└─────────────────────────────┘
 ```
 
-This allows aggregate queries to remain fast.
-
-The benchmark achieved an **aggregate P95 latency of approximately 100 ms**.
+Instead of repeatedly processing a large number of raw logs, aggregation queries can operate on the smaller rollup dataset.
 
 ---
 
-# ✨ Features
+## Performance-Oriented Design
 
-## Log Ingestion
+Several application and database decisions focus specifically on high-throughput workloads.
 
-* HTTP-based log ingestion
-* Batch processing
-* Bulk PostgreSQL inserts
-* Request validation
-* High-throughput processing
-* Zero errors in the final benchmark
+### Bulk Inserts
 
-## Log Querying
+The application groups logs and writes them to PostgreSQL in batches rather than performing an individual insert for every log.
 
-* Retrieve stored logs
-* Filtering
-* Time-based queries
+```text
+Many Logs
+    │
+    ▼
+Batch
+    │
+    ▼
+Bulk Insert
+    │
+    ▼
+PostgreSQL
+```
+
+---
+
+### Connection Pooling
+
+The application uses PostgreSQL connection pooling so database connections can be reused.
+
+```text
+                 Application
+                      │
+                      ▼
+             ┌─────────────────┐
+             │ Connection Pool │
+             └────────┬────────┘
+                      │
+             ┌────────┼────────┐
+             │        │        │
+             ▼        ▼        ▼
+          Conn 1   Conn 2   Conn N
+             │        │        │
+             └────────┼────────┘
+                      ▼
+                 PostgreSQL
+```
+
+This avoids creating a new database connection for every request.
+
+---
+
+### Database Indexing
+
+Indexes are used to support common query patterns.
+
+The indexing strategy focuses on fields commonly used for:
+
+* Timestamp-based queries
+* Service filtering
+* Log-level filtering
+* Combined filtering
 * Stable ordering
-* Cursor pagination
-* Consistent results
+
+Indexes reduce unnecessary PostgreSQL scans and improve query performance as the number of stored logs increases.
+
+---
+
+## Cursor-Based Pagination
+
+The query API uses cursor-based pagination to provide stable traversal through large datasets.
+
+```mermaid
+flowchart LR
+
+    Request["GET /logs"]
+    Page1["Page 1"]
+    Cursor1["Cursor"]
+    Page2["Page 2"]
+    Cursor2["Cursor"]
+    Page3["Page 3"]
+
+    Request --> Page1
+    Page1 --> Cursor1
+    Cursor1 --> Page2
+    Page2 --> Cursor2
+    Cursor2 --> Page3
+```
+
+This avoids relying exclusively on large `OFFSET` values, which can become increasingly expensive when navigating deep into a large dataset.
+
+Cursor-based pagination also provides stable ordering between pages.
+
+---
 
 ## Aggregation
 
-* Time-based aggregation
-* Service-level aggregation
-* Log-level aggregation
-* Efficient rollup queries
+The service supports time-based and grouped log aggregation.
 
-## Reliability
+```mermaid
+flowchart LR
 
-The implementation was tested against multiple reliability scenarios.
+    Raw[("Raw Logs")]
+    Aggregator["Aggregation Logic"]
+    Rollup[("Rollup Data")]
+    Query["Aggregate Query"]
+    Result["API Response"]
 
-Final result:
+    Raw --> Aggregator
+    Aggregator --> Rollup
+    Rollup --> Query
+    Query --> Result
+```
 
-**4 / 4 reliability scenarios passed.**
+Using pre-aggregated data reduces the amount of raw data that needs to be processed for repeated aggregation requests.
+
+The final benchmark achieved an aggregate P95 latency of approximately **100 ms**.
 
 ---
 
-# 🛠️ Tech Stack
+# API
 
-| Technology                  | Purpose                                |
-| --------------------------- | -------------------------------------- |
-| **Node.js**                 | Runtime                                |
-| **TypeScript**              | Application development                |
-| **Fastify**                 | HTTP API framework                     |
-| **PostgreSQL**              | Persistent data storage                |
-| **Docker**                  | Containerization                       |
-| **Docker Compose**          | Multi-container orchestration          |
-| **Zod / Schema Validation** | Input validation                       |
-| **pg**                      | PostgreSQL client / connection pooling |
+## `GET /health`
 
----
-
-# 📁 Project Structure
-
-```text
-.
-├── src/
-│   ├── routes/
-│   ├── services/
-│   ├── repositories/
-│   ├── schemas/
-│   └── ...
-│
-├── Dockerfile
-├── docker-compose.yml
-├── package.json
-├── package-lock.json
-├── tsconfig.json
-├── benchmark-report.json
-└── README.md
-```
-
-The repository contains the application source code under `src`, together with Docker configuration, TypeScript configuration, dependency manifests, and the benchmark report.
-
----
-
-# ⚙️ Getting Started
-
-## Prerequisites
-
-Make sure the following are installed:
-
-* Node.js
-* npm
-* Docker
-* Docker Compose
-
-You can verify the installations with:
-
-```bash
-node --version
-npm --version
-docker --version
-docker compose version
-```
-
----
-
-# 📥 Installation
-
-Clone the repository:
-
-```bash
-git clone https://github.com/Mohammad-Sheikh-Qasem/Log-Ingestion-and-Query-Service-final-projects-FTS-internship.git
-```
-
-Enter the project directory:
-
-```bash
-cd Log-Ingestion-and-Query-Service-final-projects-FTS-internship
-```
-
-Install dependencies:
-
-```bash
-npm install
-```
-
----
-
-# 🐳 Running with Docker
-
-Build and start the application:
-
-```bash
-docker compose up --build
-```
-
-To run in detached mode:
-
-```bash
-docker compose up -d --build
-```
-
-Check running containers:
-
-```bash
-docker compose ps
-```
-
-View application logs:
-
-```bash
-docker compose logs -f app
-```
-
-Stop the application:
-
-```bash
-docker compose down
-```
-
----
-
-# 🔌 API
-
-The service exposes an HTTP API for ingesting and querying logs.
-
-## Health Check
+Checks whether the application and database are available.
 
 ```http
 GET /health
@@ -449,369 +380,527 @@ curl http://localhost:8080/health
 
 ---
 
-# 📥 Ingest Logs
+## `POST /logs`
+
+Accepts a batch of logs.
 
 ```http
 POST /logs
+Content-Type: application/json
 ```
 
-Example request:
+Example:
 
 ```json
 {
   "logs": [
     {
-      "timestamp": "2026-08-22T10:00:00Z",
+      "timestamp": "2026-08-22T10:00:00.000Z",
+      "level": "info",
       "service": "api",
-      "level": "ERROR",
-      "message": "Database connection failed"
+      "message": "User logged in"
     }
   ]
 }
 ```
 
-The endpoint validates the incoming payload and sends logs through the batching and persistence pipeline.
+The request is validated before the logs enter the ingestion pipeline.
 
 ---
 
-# 🔎 Query Logs
+## `GET /logs`
+
+Retrieves stored logs.
 
 ```http
 GET /logs
 ```
 
-The query endpoint supports the available filtering and pagination parameters implemented by the service.
-
 Example:
 
 ```bash
-curl "http://localhost:8080/logs"
+curl http://localhost:8080/logs
 ```
 
-Filters can be combined to narrow the result set.
+The endpoint supports the query filters and pagination implemented by the service.
 
 ---
 
-# 📊 Aggregate Logs
+## `GET /logs/aggregate`
+
+Provides aggregated log information.
 
 ```http
 GET /logs/aggregate
 ```
 
-The aggregation endpoint returns summarized log information based on the supported aggregation dimensions.
-
 Example:
 
 ```bash
-curl "http://localhost:8080/logs/aggregate"
+curl http://localhost:8080/logs/aggregate
+```
+
+Aggregation can be used to summarize logs by supported time, service, and level dimensions.
+
+---
+
+# Benchmark Results
+
+The final implementation was evaluated using the project benchmark suite.
+
+```text
+┌────────────────────────────────────────────┐
+│              BENCHMARK RESULTS             │
+├────────────────────────────────────────────┤
+│                                            │
+│ Correctness          15.0 / 15             │
+│ Performance          41.3 / 50             │
+│ Queries              13.2 / 15             │
+│ Reliability          20.0 / 20             │
+│                                            │
+├────────────────────────────────────────────┤
+│ Throughput           14,957 logs/sec       │
+│ Error Rate           0.0%                  │
+│ Ingestion P95        430 ms                │
+│ Aggregate P95        100 ms                │
+│ Query Consistency    4 / 4                 │
+│ Reliability          4 / 4 scenarios       │
+│                                            │
+└────────────────────────────────────────────┘
 ```
 
 ---
 
-# 🧪 Testing
-
-The project was tested using the benchmark suite covering four major areas:
-
-### Correctness
-
-All correctness checks passed:
+## Correctness
 
 ```text
-15 / 15
+15 / 15 checks passed
+
+[####################] 100%
 ```
 
-### Performance
+All correctness checks passed.
+
+---
+
+## Performance
 
 ```text
-Throughput: 14,957 logs/sec
-Errors:     0.0%
-P95:        430 ms
+41.3 / 50
+
+[################----] 82.6%
 ```
 
-### Queries
+The service achieved:
 
 ```text
-Query Score:        13.2 / 15
-Aggregate P95:      100 ms
-Consistency Checks: 4 / 4
-```
-
-### Reliability
-
-```text
-Reliability Score: 20 / 20
-Scenarios Passed:  4 / 4
+Throughput:  14,957 logs/sec
+Error Rate:  0.0%
+P95:         430 ms
 ```
 
 ---
 
-# 📈 Benchmark Summary
+## Query Performance
 
 ```text
-                    FINAL BENCHMARK
+13.2 / 15
 
-Correctness  ████████████████████  15.0 / 15
-Performance  █████████████████░░░  41.3 / 50
-Queries      ██████████████████░░  13.2 / 15
-Reliability  ████████████████████  20.0 / 20
+[##################--] 88.0%
 ```
 
-### Throughput
+Query benchmark results:
 
 ```text
-14,957 logs / second
+Aggregate P95:       100 ms
+Consistency Checks:  4 / 4
 ```
 
-### Error Rate
+---
+
+## Reliability
 
 ```text
+20 / 20
+
+[####################] 100%
+```
+
+All reliability scenarios passed:
+
+```text
+Scenario 1    PASS
+Scenario 2    PASS
+Scenario 3    PASS
+Scenario 4    PASS
+
+Result:       4 / 4
+```
+
+---
+
+# Performance Summary
+
+```text
+                    SYSTEM PERFORMANCE
+
+              ┌───────────────────────┐
+              │  14,957 logs / sec    │
+              └───────────┬───────────┘
+                          │
+                          ▼
+                 ┌─────────────────┐
+                 │ Batch Processing │
+                 └────────┬────────┘
+                          │
+                          ▼
+                 ┌─────────────────┐
+                 │   Bulk Insert   │
+                 └────────┬────────┘
+                          │
+                          ▼
+                 ┌─────────────────┐
+                 │   PostgreSQL    │
+                 └─────────────────┘
+```
+
+The measured throughput demonstrates that the system can process approximately 15K logs per second under the benchmark environment.
+
+---
+
+# Error Rate
+
+```text
+Error Rate
+
 0.0%
+
+[####################] 100% successful
 ```
 
-### P95 Ingestion Latency
+No errors were recorded during the final performance benchmark.
+
+---
+
+# Latency
 
 ```text
+Ingestion P95
+
 430 ms
+
+[████████████████████████████████████████]
 ```
 
-### Aggregate P95
-
 ```text
+Aggregate P95
+
 100 ms
+
+[██████████]
 ```
 
----
-
-# 🔐 Reliability
-
-Reliability was a major design goal of the project.
-
-The final benchmark achieved:
-
-**4/4 reliability scenarios passed.**
-
-The service was designed to maintain correct behavior under different operational conditions while preventing data corruption and maintaining consistent query results.
+P95 represents the response time within which approximately 95% of requests completed.
 
 ---
 
-# ⚡ Performance Engineering
+# Testing
 
-The implementation focuses on avoiding common high-throughput bottlenecks.
+The benchmark evaluates the system across four major areas:
 
-### Instead of
+```mermaid
+flowchart TD
+
+    Benchmark["Benchmark"]
+
+    Correctness["Correctness"]
+    Performance["Performance"]
+    Queries["Queries"]
+    Reliability["Reliability"]
+
+    Benchmark --> Correctness
+    Benchmark --> Performance
+    Benchmark --> Queries
+    Benchmark --> Reliability
+```
+
+The final results were:
+
+| Category    |    Result |
+| ----------- | --------: |
+| Correctness | 15.0 / 15 |
+| Performance | 41.3 / 50 |
+| Queries     | 13.2 / 15 |
+| Reliability | 20.0 / 20 |
+
+---
+
+# Project Structure
 
 ```text
-15,000 logs/sec
-       │
-       ▼
-15,000 individual INSERT operations
-       │
-       ▼
-Database bottleneck
+.
+├── src/
+│   ├── routes/
+│   ├── services/
+│   ├── repositories/
+│   ├── schemas/
+│   └── ...
+│
+├── Dockerfile
+├── docker-compose.yml
+├── benchmark-report.json
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+└── README.md
 ```
-
-### The system uses
-
-```text
-15,000 logs/sec
-       │
-       ▼
-In-Memory Batch
-       │
-       ▼
-Bulk INSERT
-       │
-       ▼
-PostgreSQL
-```
-
-This architecture reduces database interaction overhead and allows the application to process significantly more logs per second.
 
 ---
 
-# 🧠 Design Principles
+# Running with Docker
 
-The project follows several important backend engineering principles:
+## Requirements
 
-### Separation of Concerns
+* Docker Desktop
+* Docker Compose
 
-The application separates:
+Check the installation:
 
-```text
-Routes
-  ↓
-Services
-  ↓
-Repositories
-  ↓
-Database
+```bash
+docker --version
+docker compose version
 ```
-
-This keeps HTTP handling, business logic, and database access independent.
-
-### Validate Early
-
-Invalid requests are rejected before reaching the persistence layer.
-
-### Minimize Database Round Trips
-
-Batching and bulk operations reduce unnecessary database communication.
-
-### Index for the Access Pattern
-
-Indexes are designed around the fields used by the query workload rather than indexing every column blindly.
-
-### Stable Pagination
-
-Cursor-based pagination provides predictable behavior for large datasets.
-
-### Optimize the Hot Path
-
-The ingestion path is optimized because it is the most frequently executed operation in the system.
 
 ---
 
-# 📦 Docker Architecture
+## Start the Application
 
-The application is containerized together with PostgreSQL.
-
-```text
-┌──────────────────────────────────────┐
-│            Docker Compose            │
-│                                      │
-│   ┌──────────────┐   ┌────────────┐  │
-│   │     App      │──►│ PostgreSQL │  │
-│   │   Fastify    │   │    DB      │  │
-│   └──────────────┘   └────────────┘  │
-│          │                           │
-│          │ Port 8080                 │
-└──────────┼───────────────────────────┘
-           │
-           ▼
-        Client
+```bash
+docker compose up --build
 ```
 
-This makes the project reproducible across development and testing environments.
+Or run it in the background:
+
+```bash
+docker compose up -d --build
+```
+
+This starts the application and PostgreSQL database.
 
 ---
 
-# 🧹 Stopping the Environment
+## Check Containers
 
-Stop the containers:
+```bash
+docker compose ps
+```
+
+---
+
+## View Application Logs
+
+```bash
+docker compose logs -f app
+```
+
+---
+
+## Stop the Application
 
 ```bash
 docker compose down
 ```
 
-To remove containers and associated volumes:
+To remove the PostgreSQL volume as well:
 
 ```bash
 docker compose down -v
 ```
 
-> Use `-v` carefully because it removes the PostgreSQL volume and therefore deletes persisted database data.
+> `docker compose down -v` removes the persisted database volume.
 
 ---
 
-# 📌 Performance Considerations
+# Running Locally
 
-The benchmark demonstrates that the current implementation is capable of approximately **15K logs/sec** under the tested environment.
+Install dependencies:
 
-Actual throughput depends on:
+```bash
+npm install
+```
 
-* CPU allocation
-* Available RAM
-* Docker resource limits
-* PostgreSQL configuration
-* Disk performance
-* Network latency
-* Batch size
-* Workload characteristics
+Create the required environment configuration.
 
-Therefore, benchmark results should be interpreted as measurements for the tested environment rather than an absolute hardware-independent limit.
+Example:
+
+```env
+PORT=8080
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/logs_db
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Build the project:
+
+```bash
+npm run build
+```
 
 ---
 
-# 🚀 Future Improvements
+# Technology Stack
+
+```text
+┌──────────────────────────────────────┐
+│              Backend                 │
+├──────────────────────────────────────┤
+│ Node.js                              │
+│ TypeScript                           │
+│ Fastify                              │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│             Data Layer               │
+├──────────────────────────────────────┤
+│ PostgreSQL                           │
+│ Connection Pooling                   │
+│ Indexes                              │
+│ Batch Processing                     │
+│ Bulk Inserts                         │
+└──────────────────┬───────────────────┘
+                   │
+                   ▼
+┌──────────────────────────────────────┐
+│          Infrastructure              │
+├──────────────────────────────────────┤
+│ Docker                               │
+│ Docker Compose                       │
+└──────────────────────────────────────┘
+```
+
+---
+
+# What This Project Demonstrates
+
+This project focuses on practical backend engineering problems rather than simply implementing CRUD endpoints.
+
+It demonstrates:
+
+* Designing a log ingestion API
+* Handling high-throughput workloads
+* In-memory batch processing
+* Bulk PostgreSQL inserts
+* Connection pooling
+* Database indexing
+* Cursor-based pagination
+* Time-based aggregation
+* Pre-aggregated rollups
+* Query consistency
+* Reliability testing
+* Performance benchmarking
+* Docker-based deployment
+* Designing for approximately 15K logs/sec workloads
+
+---
+
+# Key Technical Decisions
+
+### Why Batching?
+
+To reduce database round trips and improve throughput.
+
+### Why PostgreSQL?
+
+PostgreSQL provides reliable persistence, indexing, transactions, and powerful aggregation capabilities.
+
+### Why Connection Pooling?
+
+To reuse database connections and prevent the overhead of creating a connection for every request.
+
+### Why Cursor Pagination?
+
+To provide stable and predictable pagination without relying on increasingly expensive large offsets.
+
+### Why Rollups?
+
+To reduce the cost of repeated aggregation queries over large volumes of raw logs.
+
+### Why Docker?
+
+To provide a reproducible environment containing both the application and PostgreSQL database.
+
+---
+
+# Future Improvements
 
 Potential future improvements include:
 
-* Horizontal application scaling
-* Message queues such as Kafka or RabbitMQ
-* Distributed ingestion workers
-* PostgreSQL partitioning for very large datasets
-* Read replicas
-* Advanced caching
-* More sophisticated aggregation strategies
-* Observability with Prometheus and Grafana
-* Automated CI/CD pipelines
-* Kubernetes deployment
-* Rate limiting and authentication
-* Full-text search optimization
+```text
+Current System
+      │
+      ├── Horizontal API Scaling
+      │
+      ├── Message Queue
+      │      ├── Kafka
+      │      └── RabbitMQ
+      │
+      ├── Dedicated Ingestion Workers
+      │
+      ├── PostgreSQL Partitioning
+      │
+      ├── Read Replicas
+      │
+      ├── Distributed Caching
+      │
+      ├── Metrics and Tracing
+      │
+      ├── CI/CD Pipeline
+      │
+      └── Kubernetes Deployment
+```
 
 ---
 
-# 📚 What This Project Demonstrates
+# Final Results
 
-This project demonstrates practical experience with:
+```text
+┌────────────────────────────────────────────┐
+│                                            │
+│              FINAL RESULTS                 │
+│                                            │
+├────────────────────────────────────────────┤
+│                                            │
+│  Throughput          14,957 logs/sec       │
+│  Error Rate          0.0%                  │
+│  Ingestion P95       430 ms                │
+│  Aggregate P95       100 ms                │
+│                                            │
+│  Correctness         15 / 15               │
+│  Query Consistency   4 / 4                 │
+│  Reliability         4 / 4                 │
+│                                            │
+└────────────────────────────────────────────┘
+```
 
-* Backend API development
-* TypeScript
-* Node.js
-* Fastify
-* PostgreSQL
-* Database indexing
-* Connection pooling
-* Batch processing
-* Bulk inserts
-* Cursor pagination
-* Data aggregation
-* Performance optimization
-* Docker
-* Load testing
-* Reliability testing
-* System design
-
-The most important engineering lesson is that **high-throughput systems require optimization of the entire data path**, not just the HTTP layer.
+The final implementation achieved strong correctness and reliability while sustaining approximately **15,000 logs per second** under the benchmark workload.
 
 ---
 
-# 👨‍💻 Author
+# Repository
+
+[Log Ingestion and Query Service](https://github.com/Mohammad-Sheikh-Qasem/Log-Ingestion-and-Query-Service-final-projects-FTS-internship)
+
+---
+
+# Author
 
 **Mohamad Sheikh Qasem**
 
 Computer Science Student
-Backend Development | Java | TypeScript | PostgreSQL
 
-GitHub:
-
-https://github.com/Mohammad-Sheikh-Qasem
-
----
-
-# 📄 License
-
-This project was developed as part of an internship project and technical evaluation.
-
----
-
-## ⭐ Project Highlights
-
-```text
-┌─────────────────────────────────────────┐
-│       LOG INGESTION & QUERY SERVICE     │
-├─────────────────────────────────────────┤
-│                                         │
-│  🚀 14,957 logs/sec                     │
-│  ⚡ 430 ms P95 latency                  │
-│  📊 100 ms aggregate P95                │
-│  ✅ 15/15 correctness                   │
-│  ✅ 0.0% errors                         │
-│  ✅ 4/4 reliability scenarios           │
-│  🐘 PostgreSQL                          │
-│  🟦 TypeScript + Node.js                │
-│  🚀 Fastify                             │
-│  🐳 Docker                              │
-│                                         │
-└─────────────────────────────────────────┘
-```
+Backend Development | Node.js | TypeScript | PostgreSQL
