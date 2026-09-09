@@ -19,6 +19,7 @@
     "@types/express": "^5.0.6",
     "@types/pg": "^8.23.1",
     "@types/pg-copy-streams": "^1.2.5",
+    "tsx": "^4.23.13",
     "typescript": "^5.5.3"
   },
   "private": true
