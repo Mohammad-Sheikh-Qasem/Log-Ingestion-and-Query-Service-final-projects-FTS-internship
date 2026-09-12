@@ -11,7 +11,7 @@ const isFlatObject = (val: Record<string, unknown>) => {
 export const LogItemSchema = z.object({
     timestamp: z.string().datetime().refine((val) => {
         const logTime = new Date(val).getTime();
-        const maxAllowedTime = Date.now() + 5 * 60 * 1000; //
+        const maxAllowedTime = Date.now() + 5 * 60 * 1000;
         return logTime <= maxAllowedTime;
     }, { message: "Timestamp cannot be more than 5 minutes in the future" }),
 
