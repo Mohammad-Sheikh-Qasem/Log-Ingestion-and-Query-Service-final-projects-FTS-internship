@@ -47,7 +47,6 @@ The system is organized around a REST API, an ingestion pipeline, query and aggr
 
 ```mermaid
 flowchart LR
-
     Client["Client"]
     Benchmark["Benchmark / Load Generator"]
 
@@ -62,10 +61,10 @@ flowchart LR
     Query["Query Service"]
     Aggregate["Aggregation Service"]
 
-    DB[("PostgreSQL")]
+    DB["PostgreSQL"]
 
-    Logs[("logs")]
-    Rollups[("logs_rollup")]
+    Logs["logs"]
+    Rollups["logs_rollup"]
 
     Client --> API
     Benchmark --> API
