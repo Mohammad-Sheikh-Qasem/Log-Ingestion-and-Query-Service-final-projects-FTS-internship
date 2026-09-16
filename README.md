@@ -51,7 +51,7 @@ flowchart LR
     Client["Client"]
     Benchmark["Benchmark / Load Generator"]
 
-    API["Fastify API"]
+    API["Express API"]
 
     Routes["API Routes"]
     Validation["Request Validation"]
